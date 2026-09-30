@@ -42,5 +42,59 @@ Querqy for OpenSearch can be used in the same way as Querqy for Elasticsearch, w
   }
   ```
   
+* In addition to Info Logging to log4j, Querqy for OpenSearch can return the applied rewrite chain in the search
+  response, similar to the Querqy debug output in Solr (see below).
+
 * Developer documentation can be found [here](docs/opensearch_dev_documentation.md)
 * Developer channel: Join #querqy on the [Search Relevancy Slack space](https://opensourceconnections.com/slack)
+
+## Returning the rewrite chain in the search response
+
+The `querqy_debug` search response processor adds the rewriters that changed the query, and what they did, to the
+`ext.querqy` section of the search response. Create a search pipeline with the processor:
+
+`PUT /_search/pipeline/querqy-debug`
+```json
+{
+  "response_processors": [ { "querqy_debug": {} } ]
+}
+```
+
+and search with it, e.g. `POST /myindex/_search?search_pipeline=querqy-debug`:
+
+```json
+"ext": {
+  "querqy": {
+    "queries": [
+      {
+        "query": "notebook",
+        "rewriters": ["common_rules"],
+        "rewrite_chain": [
+          {
+            "rewriter_id": "common_rules",
+            "actions": [
+              {
+                "message": "notebook#0",
+                "match": { "term": "notebook", "type": "exact" },
+                "instructions": [ { "type": "synonym", "value": "laptop" } ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+There is one entry for each `querqy` query in the request, including queries nested in compound queries. Rewriters
+that did not change the query are not listed in `rewrite_chain`. The message is the rule's `@_log` property, or the
+rule id if the rule has no `@_log` property. The details do not depend on the `info_logging` settings of the rewriters.
+
+Things to know:
+* The rewriting happens on the shards, which cannot return it with the response. The processor therefore runs the
+  rewrite chain again on the coordinating node. For this, it loads and caches the rewriters on the coordinating node.
+* The WordBreakCompoundRewriter needs the index of a shard and cannot run on the coordinating node. It is listed under
+  `skipped_rewriters`. Rewriters after it in the chain see the query without the word break rewriting.
+* The output reveals the matching rules to everyone who can search with the pipeline. Search pipelines can also be
+  defined in the search request itself, so do not rely on the pipeline name to keep the rules private.

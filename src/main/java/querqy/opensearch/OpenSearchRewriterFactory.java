@@ -91,6 +91,14 @@ public abstract class OpenSearchRewriterFactory {
 
     public abstract RewriterFactory createRewriterFactory(IndexShard indexShard) throws OpenSearchException;
 
+    /**
+     * @return true if the rewriters created by this factory need a shard (i.e. a shard's searcher) to rewrite a
+     * query. Such rewriters cannot run on the coordinating node, which the rewrite debug output does.
+     */
+    public boolean requiresShard() {
+        return false;
+    }
+
     public String getRewriterId() {
         return rewriterId;
     }

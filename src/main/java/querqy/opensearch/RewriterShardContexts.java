@@ -24,15 +24,19 @@ import org.opensearch.OpenSearchException;
 import org.opensearch.cluster.routing.ShardRouting;
 import org.opensearch.common.inject.Inject;
 import org.opensearch.common.settings.Settings;
+import org.opensearch.index.IndexService;
 import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.index.shard.IndexEventListener;
 import org.opensearch.index.shard.IndexShard;
 import org.opensearch.core.index.shard.ShardId;
 import org.opensearch.indices.IndicesService;
+import org.opensearch.transport.client.Client;
+import querqy.opensearch.RewriterShardContext.ShardIndependentRewriteChain;
 
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Stream;
 
 public class RewriterShardContexts implements IndexEventListener {
 
@@ -43,6 +47,12 @@ public class RewriterShardContexts implements IndexEventListener {
 
     private IndicesService indicesService;
     private Settings settings;
+
+    /**
+     * A context that is not bound to a shard. It serves requests that run on the coordinating node, like the
+     * rewrite debug output.
+     */
+    private volatile RewriterShardContext shardIndependentContext;
 
     public RewriterShardContexts(final Settings settings) {
         this.settings = settings;
@@ -62,13 +72,31 @@ public class RewriterShardContexts implements IndexEventListener {
         return shardContext.getRewriteChain(rewriterIds);
     }
 
+    public ShardIndependentRewriteChain getShardIndependentRewriteChain(final List<String> rewriterIds,
+                                                                       final Client client) {
+        RewriterShardContext context = shardIndependentContext;
+        if (context == null) {
+            context = loadShardIndependentContext(client);
+        }
+        return context.getShardIndependentRewriteChain(rewriterIds);
+    }
+
+    private synchronized RewriterShardContext loadShardIndependentContext(final Client client) {
+        if (shardIndependentContext == null) {
+            shardIndependentContext = new RewriterShardContext("shard-independent rewriters", () -> null,
+                    settings, client);
+        }
+        return shardIndependentContext;
+    }
+
     protected synchronized RewriterShardContext loadShardContext(final ShardId shardId,
                                                                  final QueryShardContext context) {
         RewriterShardContext shardContext = shardContexts.get(shardId);
 
         if (shardContext == null) {
-            shardContext = new RewriterShardContext(shardId, indicesService.indexService(shardId.getIndex()),  settings,
-                    context.getClient());
+            final IndexService indexService = indicesService.indexService(shardId.getIndex());
+            shardContext = new RewriterShardContext("shard " + shardId + " " + shardId.getIndex(),
+                    () -> indexService.getShard(shardId.id()), settings, context.getClient());
             shardContexts.put(shardId, shardContext);
         }
 
@@ -76,7 +104,7 @@ public class RewriterShardContexts implements IndexEventListener {
     }
 
     public synchronized void reloadRewriter(final String rewriterId) {
-        shardContexts.values().forEach(ctx -> {
+        allContexts().forEach(ctx -> {
             try {
                 ctx.reloadRewriter(rewriterId);
             } catch (final Exception e) {
@@ -87,11 +115,15 @@ public class RewriterShardContexts implements IndexEventListener {
     }
 
     public void clearRewriter(final String rewriterId) {
-        shardContexts.values().forEach(ctx -> ctx.clearRewriter(rewriterId));
+        allContexts().forEach(ctx -> ctx.clearRewriter(rewriterId));
     }
 
     public void clearRewriters() {
-        shardContexts.values().forEach(RewriterShardContext::clearRewriters);
+        allContexts().forEach(RewriterShardContext::clearRewriters);
+    }
+
+    private Stream<RewriterShardContext> allContexts() {
+        return Stream.concat(shardContexts.values().stream(), Stream.ofNullable(shardIndependentContext));
     }
 
     @Override

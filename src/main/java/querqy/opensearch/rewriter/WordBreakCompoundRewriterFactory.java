@@ -40,6 +40,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -132,7 +133,7 @@ public class WordBreakCompoundRewriterFactory extends OpenSearchRewriterFactory 
 
     private static OptionalModifierPosition parseOptionalModifierPosition(final String name) {
         try {
-            return OptionalModifierPosition.valueOf(name.trim().toUpperCase());
+            return OptionalModifierPosition.valueOf(name.trim().toUpperCase(Locale.ROOT));
         } catch (final IllegalArgumentException e) {
             throw new IllegalArgumentException("No such optionalModifierPosition " + name + ". Valid values: "
                     + Arrays.toString(OptionalModifierPosition.values()));
@@ -184,6 +185,12 @@ public class WordBreakCompoundRewriterFactory extends OpenSearchRewriterFactory 
         }
 
         return errors;
+    }
+
+    @Override
+    public boolean requiresShard() {
+        // the rewriter reads the dictionary field from the shard's index
+        return true;
     }
 
     @Override

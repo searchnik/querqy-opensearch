@@ -22,6 +22,12 @@ import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.Query;
 import org.opensearch.index.query.QueryShardContext;
+import org.opensearch.transport.client.Client;
+import querqy.model.ExpandedQuery;
+import querqy.model.MatchAllQuery;
+import querqy.opensearch.RewriterShardContext.ShardIndependentRewriteChain;
+import querqy.parser.WhiteSpaceQuerqyParser;
+import querqy.rewrite.logging.RewriteChainLog;
 import querqy.lucene.rewrite.infologging.InfoLogging;
 import querqy.lucene.rewrite.infologging.Sink;
 import querqy.opensearch.infologging.LogPayloadType;
@@ -130,6 +136,40 @@ public class QuerqyProcessor {
 
     }
 
+
+    /**
+     * Runs the rewrite chain of the query outside of a shard and returns the rewrite log. Only the rewrite chain is
+     * run, no Lucene query is built. Rewriters that need a shard are skipped.
+     */
+    public RewriteDebugInfo rewriteForDebugging(final QuerqyQueryBuilder queryBuilder, final Client client) {
+
+        final List<Rewriter> rewriters = queryBuilder.getRewriters();
+        if (rewriters == null || rewriters.isEmpty()) {
+            return new RewriteDebugInfo(null, Collections.emptyList());
+        }
+
+        final ShardIndependentRewriteChain chain = rewriterShardContexts.getShardIndependentRewriteChain(
+                rewriters.stream().map(Rewriter::getName).collect(Collectors.toList()), client);
+
+        final DismaxSearchEngineRequestAdapter requestAdapter = DismaxSearchEngineRequestAdapter
+                .forRewriteDebugging(queryBuilder, chain.rewriteChain());
+
+        final String queryString = requestAdapter.getQueryString();
+        final ExpandedQuery expandedQuery = requestAdapter.isMatchAllQuery(queryString)
+                ? new ExpandedQuery(new MatchAllQuery())
+                : new ExpandedQuery(requestAdapter.createQuerqyParser().orElseGet(WhiteSpaceQuerqyParser::new)
+                        .parse(queryString));
+
+        return new RewriteDebugInfo(
+                chain.rewriteChain().rewrite(expandedQuery, requestAdapter).getRewriteLog().orElse(null),
+                chain.skippedRewriterIds());
+    }
+
+    /**
+     * @param rewriteChainLog The log of the rewriters that applied a rewriting, or null
+     * @param skippedRewriterIds The ids of the rewriters that were not run because they need a shard
+     */
+    public record RewriteDebugInfo(RewriteChainLog rewriteChainLog, List<String> skippedRewriterIds) {}
 
     void appendFilterQueries(final LuceneQueries queries, final BooleanQuery.Builder builder) {
 

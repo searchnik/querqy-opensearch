@@ -34,6 +34,7 @@ import java.io.IOException;
 import java.io.StringReader;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 
@@ -79,7 +80,7 @@ public class SimpleCommonRulesRewriterFactory extends OpenSearchRewriterFactory 
                 .orElse(DEFAULT_LOOKUP_PREPROCESSOR_TYPE);
 
         final BoostMethod boostMethod = ConfigUtils
-                .getEnumArg(config, CONF_BOOST_METHOD, BoostMethod.class, String::toUpperCase)
+                .getEnumArg(config, CONF_BOOST_METHOD, BoostMethod.class, s -> s.toUpperCase(Locale.ROOT))
                 .orElse(DEFAULT_BOOST_METHOD);
 
         try {
@@ -120,7 +121,7 @@ public class SimpleCommonRulesRewriterFactory extends OpenSearchRewriterFactory 
         final BoostMethod boostMethod;
         try {
             boostMethod = ConfigUtils
-                    .getEnumArg(config, CONF_BOOST_METHOD, BoostMethod.class, String::toUpperCase)
+                    .getEnumArg(config, CONF_BOOST_METHOD, BoostMethod.class, s -> s.toUpperCase(Locale.ROOT))
                     .orElse(DEFAULT_BOOST_METHOD);
         } catch (final Exception e) {
             return Collections.singletonList("Invalid attribute 'boostMethod': " + e.getMessage());

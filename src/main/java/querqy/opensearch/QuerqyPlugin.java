@@ -40,14 +40,19 @@ import org.opensearch.index.IndexModule;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.plugins.ActionPlugin;
 import org.opensearch.plugins.Plugin;
+import org.opensearch.plugins.SearchPipelinePlugin;
 import org.opensearch.plugins.SearchPlugin;
 import org.opensearch.repositories.RepositoriesService;
 import org.opensearch.rest.RestController;
 import org.opensearch.rest.RestHandler;
 import org.opensearch.script.ScriptService;
+import org.opensearch.search.pipeline.Processor;
+import org.opensearch.search.pipeline.SearchResponseProcessor;
 import org.opensearch.threadpool.ThreadPool;
 import org.opensearch.transport.client.Client;
 import org.opensearch.watcher.ResourceWatcherService;
+import querqy.opensearch.debug.QuerqyDebugResponseProcessor;
+import querqy.opensearch.debug.QuerqyDebugSearchExt;
 import querqy.opensearch.infologging.Log4jSink;
 import querqy.opensearch.query.QuerqyQueryBuilder;
 import querqy.opensearch.rewriterstore.DeleteRewriterAction;
@@ -68,9 +73,10 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Supplier;
 
-public class QuerqyPlugin extends Plugin implements SearchPlugin, ActionPlugin {
+public class QuerqyPlugin extends Plugin implements SearchPlugin, ActionPlugin, SearchPipelinePlugin {
 
 
     private final QuerqyProcessor querqyProcessor;
@@ -98,6 +104,19 @@ public class QuerqyPlugin extends Plugin implements SearchPlugin, ActionPlugin {
                         QuerqyQueryBuilder.NAME,
                         (in) -> new QuerqyQueryBuilder(in, querqyProcessor),
                         (parser) -> QuerqyQueryBuilder.fromXContent(parser, querqyProcessor)));
+    }
+
+    @Override
+    public List<SearchExtSpec<?>> getSearchExts() {
+        return Collections.singletonList(new SearchExtSpec<>(QuerqyDebugSearchExt.NAME, QuerqyDebugSearchExt::new,
+                QuerqyDebugSearchExt::fromXContent));
+    }
+
+    @Override
+    public Map<String, Processor.Factory<SearchResponseProcessor>> getResponseProcessors(final Parameters parameters) {
+        return Map.of(QuerqyDebugResponseProcessor.TYPE,
+                new QuerqyDebugResponseProcessor.Factory(querqyProcessor, parameters.client,
+                        parameters.genericExecutor));
     }
 
     @Override

@@ -17,3 +17,5 @@ example*
 *.iml
 
 .mcp.json
+CLAUDE.md
+.vscode

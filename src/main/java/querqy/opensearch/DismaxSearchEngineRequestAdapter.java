@@ -92,6 +92,32 @@ public class DismaxSearchEngineRequestAdapter implements LuceneSearchEngineReque
         rewriteLoggingConfig = createRewriteLoggingConfig(infoLogging, queryBuilder.getInfoLoggingSpec());
     }
 
+    private DismaxSearchEngineRequestAdapter(final QuerqyQueryBuilder queryBuilder,
+                                             final RewriteChain rewriteChain,
+                                             final RewriteLoggingConfig rewriteLoggingConfig) {
+        this.shardContext = null;
+        this.rewriteChain = rewriteChain;
+        this.queryBuilder = queryBuilder;
+        this.infoLoggingContext = null;
+        this.rewriteLoggingConfig = rewriteLoggingConfig;
+    }
+
+    /**
+     * Creates an adapter that is not bound to a shard. It can only be used to run the rewrite chain, not to build
+     * Lucene queries. The rewrite log includes the details of all rewriters in the chain.
+     */
+    public static DismaxSearchEngineRequestAdapter forRewriteDebugging(final QuerqyQueryBuilder queryBuilder,
+                                                                       final RewriteChain rewriteChain) {
+        return new DismaxSearchEngineRequestAdapter(queryBuilder, rewriteChain,
+                RewriteLoggingConfig.builder()
+                        .isActive(true)
+                        .hasDetails(true)
+                        .includedRewriters(rewriteChain.getFactories().stream()
+                                .map(RewriterFactory::getRewriterId)
+                                .collect(Collectors.toSet()))
+                        .build());
+    }
+
     /**
      * <p>Get the query string that should be parsed into the main query.</p>
      *
